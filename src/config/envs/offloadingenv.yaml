@@ -1,0 +1,19 @@
+env: offloading
+
+env_args:
+  reward_sparse: False
+  obs_instead_of_state: False  # 是否将所有智能体的观测组合作为全局状态
+  total_power: 1000
+  router_bw: 10000
+  interval_time: 300
+  hosts: 16
+  new_containers: 16
+  seed: 42
+  num_step: 20
+test_greedy: True
+test_nepisode: 32
+test_interval: 16
+log_interval: 16
+runner_log_interval: 16
+learner_log_interval: 16
+t_max: 32

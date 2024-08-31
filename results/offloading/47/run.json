@@ -1,0 +1,118 @@
+{
+  "artifacts": [],
+  "command": "my_main",
+  "experiment": {
+    "base_dir": "D:\\workspace\\pycharmspace\\pymarl\\src",
+    "dependencies": [
+      "numpy==1.26.3",
+      "PyYAML==6.0.1",
+      "sacred==0.8.5",
+      "torch==2.2.1"
+    ],
+    "mainfile": "offloading_main.py",
+    "name": "pymarl",
+    "repositories": [
+      {
+        "commit": "5de4b64a23c5c5a2bccc7266bf1143100875c322",
+        "dirty": true,
+        "url": "https://github.com/lazr-vk/HAN_master.git"
+      },
+      {
+        "commit": "5de4b64a23c5c5a2bccc7266bf1143100875c322",
+        "dirty": true,
+        "url": "https://github.com/lazr-vk/HAN_master.git"
+      },
+      {
+        "commit": "5de4b64a23c5c5a2bccc7266bf1143100875c322",
+        "dirty": true,
+        "url": "https://github.com/lazr-vk/HAN_master.git"
+      }
+    ],
+    "sources": [
+      [
+        "offloading_main.py",
+        "_sources\\offloading_main_825a386ad3779c258ffa00eebafe0934.py"
+      ],
+      [
+        "offloading_run.py",
+        "_sources\\offloading_run_984cefd93bd6c5146561e9370590ddb8.py"
+      ],
+      [
+        "utils\\logging.py",
+        "_sources\\logging_aa14e56e60b01dd7a9ddb8e6cdf36b85.py"
+      ]
+    ]
+  },
+  "fail_trace": [
+    "Traceback (most recent call last):\n",
+    "  File \"D:\\py\\Anaconda3\\envs\\pytorch\\lib\\site-packages\\sacred\\config\\captured_function.py\", line 42, in captured_function\n    result = wrapped(*args, **kwargs)\n",
+    "  File \"D:/workspace/pycharmspace/pymarl/src/offloading_main.py\", line 35, in my_main\n    run(_run, config, _log)\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\offloading_run.py\", line 50, in run\n    run_sequential(args=args, logger=logger)\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\offloading_run.py\", line 91, in run_sequential\n    env_info = runner.get_env_info()\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\runners\\offloading_test.py\", line 37, in get_env_info\n    return self.env.get_env_info()\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\envs\\offloadingenv.py\", line 150, in get_env_info\n    \"state_shape\": self.get_state_size(),\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\envs\\offloadingenv.py\", line 110, in get_state_size\n    return self.get_state().size\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\envs\\offloadingenv.py\", line 86, in get_state\n    cpu = [host.getCPU() / 100 for host in self.hostlist]\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\envs\\offloadingenv.py\", line 86, in <listcomp>\n    cpu = [host.getCPU() / 100 for host in self.hostlist]\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\envs\\host\\Host.py\", line 29, in getCPU\n    ips = self.getApparentIPS()\n",
+    "  File \"D:\\workspace\\pycharmspace\\pymarl\\src\\envs\\host\\Host.py\", line 44, in getApparentIPS\n    containers = super(Host, self).getApparentIPS(self.id) # \u68c0\u67e5\u662f\u5426\u6709\u5bb9\u5668\u4efb\u52a1\u5728\u4e3b\u673a\u4e0a\u6267\u884c\n",
+    "AttributeError: 'super' object has no attribute 'getApparentIPS'\n"
+  ],
+  "heartbeat": "2024-08-21T13:19:13.302001",
+  "host": {
+    "ENV": {},
+    "cpu": "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz",
+    "gpus": {
+      "driver_version": "531.29",
+      "gpus": [
+        {
+          "model": "NVIDIA GeForce GTX 1650",
+          "persistence_mode": false,
+          "total_memory": 4096
+        }
+      ]
+    },
+    "hostname": "LAPTOP-9V5T91BO",
+    "os": [
+      "Windows",
+      "Windows-10-10.0.22000-SP0"
+    ],
+    "python_version": "3.9.18"
+  },
+  "meta": {
+    "command": "my_main",
+    "config_updates": {},
+    "named_configs": [],
+    "options": {
+      "--beat-interval": null,
+      "--capture": null,
+      "--comment": null,
+      "--debug": false,
+      "--enforce_clean": false,
+      "--file_storage": null,
+      "--force": false,
+      "--help": false,
+      "--id": null,
+      "--loglevel": null,
+      "--mongo_db": null,
+      "--name": null,
+      "--pdb": false,
+      "--print-config": false,
+      "--priority": null,
+      "--queue": false,
+      "--s3": null,
+      "--sql": null,
+      "--tiny_db": null,
+      "--unobserved": false,
+      "COMMAND": null,
+      "UPDATE": [],
+      "help": false,
+      "with": false
+    }
+  },
+  "resources": [],
+  "result": null,
+  "start_time": "2024-08-21T13:18:29.812689",
+  "status": "FAILED",
+  "stop_time": "2024-08-21T13:19:13.306001"
+}

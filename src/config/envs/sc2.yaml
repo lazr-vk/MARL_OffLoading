@@ -1,0 +1,40 @@
+env: sc2
+
+env_args:
+  continuing_episode: False  # 是否在时间限制达到后继续计算回合
+  difficulty: "7"  # 内置AI的难度级别
+  game_version: null  # StarCraft II 游戏版本，默认值为最新版本
+  map_name: "3m"  # 决定使用的地图名称。不同的地图有不同的单位数量、布局和限制。
+  move_amount: 2  # 智能体每一步移动的距离。
+  obs_all_health: True  # 是否包括所有单位的健康值作为观测的一部分
+  obs_instead_of_state: False  # 是否将所有智能体的观测组合作为全局状态
+  obs_last_action: False  # 是否包括所有智能体的最后动作作为观测的一部分
+  obs_own_health: True  # 是否包括智能体自身的健康值作为观测的一部分
+  obs_pathing_grid: False  # 是否包括周围区域的路径信息作为观测的一部分
+  obs_terrain_height: False  # 是否包括周围区域的地形高度信息作为观测的一部分
+  obs_timestep_number: False  # 是否包括当前回合数作为观测的一部分
+  reward_death_value: 10  # 杀死一个敌人单位时获得的奖励值；如果使用负奖励，当友军被杀时也会扣除相应的奖励值
+  reward_defeat: 0  # 失败时获得的奖励，应为非正值
+  reward_negative_scale: 0.5  # 负奖励的缩放比例，只有当 reward_only_positive=False 时有效
+  reward_only_positive: True  # 奖励是否总是正数，避免负奖励
+  reward_scale: True  # 是否缩放奖励
+  reward_scale_rate: 20  # 奖励缩放比例，奖励将被除以 (max_reward / reward_scale_rate)，其中 max_reward 是不考虑护盾再生时每回合可能获得的最大奖励
+  reward_sparse: False  # 是否使用稀疏奖励
+  reward_win: 200  # 胜利时获得的奖励
+  replay_dir: ""  # 回放保存的目录
+  replay_prefix: ""  # 回放保存的前缀名，默认使用地图名
+  state_last_action: True  # 是否在全局状态中包括所有智能体的最后动作
+  state_timestep_number: False  # 是否在全局状态中包括当前回合数
+  step_mul: 8  # 每个智能体动作对应的游戏步数。即，智能体每行动一次，游戏中经过的步数
+  seed: null
+  heuristic_ai: False  # 是否使用非学习的启发式AI
+  heuristic_rest: False  # 限制启发式AI的动作，使其只能选择RL智能体可用的动作
+  debug: False  # 是否记录调试信息（例如观测、状态、动作和奖励）
+
+test_greedy: True
+test_nepisode: 32
+test_interval: 10000
+log_interval: 10000
+runner_log_interval: 10000
+learner_log_interval: 10000
+t_max: 2050000

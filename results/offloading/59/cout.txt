@@ -1,0 +1,14 @@
+Error evaluating: thread_id: pid_22720_id_2234521593456
+frame_id: 2235067996176
+scope: FRAME
+attrs: global_container_state
+Traceback (most recent call last):
+  File "D:\Program Files\JetBrains\PyCharm 2022.1\plugins\python\helpers\pydev\_pydevd_bundle\pydevd_vars.py", line 314, in resolve_compound_variable_fields
+    return _typeName, _resolve_default_variable_fields(var, resolver, offset)
+  File "D:\Program Files\JetBrains\PyCharm 2022.1\plugins\python\helpers\pydev\_pydevd_bundle\pydevd_vars.py", line 264, in _resolve_default_variable_fields
+    return resolver.get_dictionary(VariableWithOffset(var, offset) if offset else var)
+  File "D:\Program Files\JetBrains\PyCharm 2022.1\plugins\python\helpers\pydev\pydevd_plugins\extensions\types\pydevd_plugin_numpy_types.py", line 93, in get_dictionary
+    ret['min'] = obj.min()
+  File "D:\py\Anaconda3\envs\pytorch\lib\site-packages\numpy\core\_methods.py", line 45, in _amin
+    return umr_minimum(a, axis, None, out, keepdims, initial, where)
+ValueError: zero-size array to reduction operation minimum which has no identity
