@@ -60,7 +60,7 @@ def run(_run, _config, _log):
     print("Exiting script")
 
     # Making sure framework really exits
-    os._exit(os.EX_OK)
+    os._exit(getattr(os, "EX_OK", 0))
 
 
 def evaluate_sequential(args, runner):
@@ -162,7 +162,7 @@ def run_sequential(args, logger):
     logger.console_logger.info("Beginning training for {} timesteps".format(args.t_max))
 
     while runner.t_env <= args.t_max:  # 主训练循环
-
+        print(runner.t_env)
         # Run for a whole episode at a time
         episode_batch = runner.run(test_mode=False)
         buffer.insert_episode_batch(episode_batch)  # 把每个episode的数据存到经验区

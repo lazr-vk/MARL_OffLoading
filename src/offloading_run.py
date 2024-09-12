@@ -8,13 +8,12 @@ from types import SimpleNamespace as SN
 from utils.logging import Logger
 from utils.timehelper import time_left, time_str
 from os.path import dirname, abspath
-
 from learners import REGISTRY as le_REGISTRY
 from runners import REGISTRY as r_REGISTRY
 from controllers import REGISTRY as mac_REGISTRY
 from components.episode_buffer import ReplayBuffer
 from components.transforms import OneHot
-
+from src.envs.RPiLocal import *
 from src.envs.RPiEdge import *
 from src.envs.BitBrainWorkload import *
 
@@ -79,15 +78,17 @@ def run_sequential(args, logger):
     # 在这新建任务和主机
     datacenter = RPiEdge(args.env_args["hosts"])
     workload = BWGD2()
+    ue = RPiLocal(args.env_args["new_containers"])
+    uelist = ue.generateHosts()
     hostlist = datacenter.generateHosts()
     containerinfo = workload.generateNewContainers(args.env_args["new_containers"],
                                                        args.env_args["seed"],
-                                                       args.env_args["num_step"])
-    # Init runner so we can get env info runner用来运行每个episode(通过runner.run实现)，里面也有建立的环境
+                                                       args.env_args["num_step"], hosts=uelist)
+    # Init runner so we can get env info runner用来运行每个episode(通过runner.run实现)，里面也有建立的环境,
     runner = r_REGISTRY[args.runner](args=args, logger=logger, host=hostlist, container=containerinfo)
 
     # Set up schemes and groups here
-    # 环境的相关信息(state_shape, obs_shape, n_actions, n_agents, episode_limit(什么作用？), agent_features, enemy_features(可能没用))
+    # 获取维度，环境的相关信息(state_shape, obs_shape, n_actions, n_agents, episode_limit(什么作用？), agent_features, enemy_features(可能没用))
     env_info = runner.get_env_info()
     args.n_agents = env_info["n_agents"]
     args.n_actions = env_info["n_actions"]
@@ -108,7 +109,7 @@ def run_sequential(args, logger):
     preprocess = {
         "actions": ("actions_onehot", [OneHot(out_dim=args.n_actions)])  #
     }
-
+    # 创建(num_episode, num_time_step, , )大小的经验回放区存储每个episode的数据
     buffer = ReplayBuffer(scheme, groups, args.buffer_size, env_info["episode_limit"] + 1,
                           preprocess=preprocess,
                           device="cpu" if args.buffer_cpu_only else args.device)
@@ -170,7 +171,7 @@ def run_sequential(args, logger):
     logger.console_logger.info("Beginning training for {} timesteps".format(args.t_max))
 
     while runner.t_env <= args.t_max:  # 主训练循环
-
+        # print('t_env', runner.t_env)
         # Run for a whole episode at a time
         episode_batch = runner.run(test_mode=False)
         buffer.insert_episode_batch(episode_batch)  # 把每个episode的数据存到经验区
@@ -201,23 +202,23 @@ def run_sequential(args, logger):
             for _ in range(n_test_runs):
                 runner.run(test_mode=True)
         # 经过一定步数保存模型
-        if args.save_model and (runner.t_env - model_save_time >= args.save_model_interval or model_save_time == 0):
-            model_save_time = runner.t_env
-            save_path = os.path.join(args.local_results_path, "models", args.unique_token, str(runner.t_env))
-            #"results/models/{}".format(unique_token)
-            os.makedirs(save_path, exist_ok=True)
-            logger.console_logger.info("Saving models to {}".format(save_path))
-
-            # learner should handle saving/loading -- delegate actor save/load to mac,
-            # use appropriate filenames to do critics, optimizer states
-            learner.save_models(save_path)
+        # if args.save_model and (runner.t_env - model_save_time >= args.save_model_interval or model_save_time == 0):
+        #     model_save_time = runner.t_env
+        #     save_path = os.path.join(args.local_results_path, "models", args.unique_token, str(runner.t_env))
+        #     #"results/models/{}".format(unique_token)
+        #     os.makedirs(save_path, exist_ok=True)
+        #     logger.console_logger.info("Saving models to {}".format(save_path))
+        #
+        #     # learner should handle saving/loading -- delegate actor save/load to mac,
+        #     # use appropriate filenames to do critics, optimizer states
+        #     learner.save_models(save_path)
 
         episode += args.batch_size_run
 
-        if (runner.t_env - last_log_T) >= args.log_interval:
-            logger.log_stat("episode", episode, runner.t_env)
-            logger.print_recent_stats()
-            last_log_T = runner.t_env
+        # if (runner.t_env - last_log_T) >= args.log_interval:
+        #     logger.log_stat("episode", episode, runner.t_env)
+        #     logger.print_recent_stats()
+        #     last_log_T = runner.t_env
 
     runner.close_env()
     logger.console_logger.info("Finished Training")

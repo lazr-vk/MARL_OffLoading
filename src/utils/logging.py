@@ -11,6 +11,7 @@ class Logger:
         self.use_hdf = False
 
         self.stats = defaultdict(lambda: [])
+        # 当你访问 defaultdict 中不存在的键时，这个 lambda 函数就会被调用，为这个键生成一个空列表作为默认值。
 
     def setup_tb(self, directory_name):
         # Import here so it doesn't have to be installed if you don't use it

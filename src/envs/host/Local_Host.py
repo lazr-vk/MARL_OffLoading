@@ -2,15 +2,13 @@ from .Disk import *
 from .RAM import *
 from .Bandwidth import *
 
-class Host():
+class LocalHost():
     # IPS = Million Instructions per second capacity
     # RAM = Ram in MB capacity
     # Disk = Disk characteristics capacity
     # Bw = Bandwidth characteristics capacity
-    def __init__(self, ID, IPS, RAM, Disk, Bw, Latency, Powermodel, Position, Environment):
-        self.id = ID
+    def __init__(self, IPS, RAM, Disk, Bw, Latency, Powermodel, Position):
         self.ipsCap = IPS
-        self.currentips = IPS
         self.ramCap = RAM
         self.diskCap = Disk
         self.bwCap = Bw
@@ -19,7 +17,6 @@ class Host():
         self.position = Position
         self.powermodel.allocHost(self)
         self.powermodel.host = self
-        self.env = Environment
         self.priority_list = []
         self.partiallyexe_list = []
 
@@ -29,8 +26,8 @@ class Host():
     def getPowerFromIPS(self, ips):
         return self.powermodel.powerFromCPU(min(100, 100 * (ips / self.ipsCap)))
 
-    def getCPU(self):  # 返回主机的cpu使用率
-        ips = self.getBaseIPS()
+    def getCPU(self):  # 返回主机的cpu使用率 如果上一时刻是在本地执行的则返回
+        ips = self.getApparentIPS()
         return 100 * (ips / self.ipsCap)  # ips表示部署在该主机上的容器任务所需的ips
 
     def getBaseIPS(self):  # 获取该主机当前执行的容器任务所需的ips
@@ -44,10 +41,8 @@ class Host():
 
     def getApparentIPS(self):  # 计算在该主机上执行的容器任务的ips和
         # Give containers remaining IPS for faster execution
-        ips = 0
-        containers = self.env.getContainersOfHost(self.id)  # 检查是否有容器任务在主机上执行
-        # print('interval', self.env.interval)
-        for containerID in containers:
+        ips = 0 # 检查是否有容器任务在主机上执行
+        for containerID in self.priority_list:
             ips += self.env.getContainerByID(containerID).getApparentIPS()  # 计算在该主机上执行的容器任务的ips和
         # assert int(ips) <= self.ipsCap
         return int(ips)
@@ -56,8 +51,7 @@ class Host():
         # IPS available is ipsCap - baseIPS
         # When containers allocated, existing ips can be allocated to
         # the containers
-        ipsavailable = self.ipsCap - self.getBaseIPS()
-        return ipsavailable if ipsavailable >= 0 else 0
+        return self.ipsCap - self.getBaseIPS()
 
     def getCurrentRAM(self):
         size, read, write = 0, 0, 0
@@ -82,11 +76,11 @@ class Host():
         for containerID in containers:
             s, r, w = self.env.getContainerByID(containerID).getDisk()
             size += s;
-            # read += r;
-            # write += w
+            read += r;
+            write += w
         assert size <= self.diskCap.size
-        # assert read <= self.diskCap.read
-        # assert write <= self.diskCap.write
+        assert read <= self.diskCap.read
+        assert write <= self.diskCap.write
         return size, read, write
 
     def getDiskAvailable(self):
@@ -94,43 +88,28 @@ class Host():
         return self.diskCap.size - size, self.diskCap.read - read, self.diskCap.write - write
 
     def execute(self):
+        # 按优先级排序任务
+        # 执行
+        exe_info = []
+        exeTime = 0
         exeTime = 0
         if self.partiallyexe_list:
             for c in self.partiallyexe_list[:]:
                 container = self.env.getContainerByID(c)
-                # print(self.env.interval)
-                containerIPS = container.remainedips[self.env.interval-1]
+                print(self.env.interval)
+                containerIPS = container.remainedips[self.env.interval - 1]
                 execTime = containerIPS / self.ipsCap
                 self.currentips -= containerIPS
                 exeTime += execTime
                 self.partiallyexe_list.remove(c)
         for c in self.priority_list:
             container = self.env.getContainerByID(c)
-            containerIPS = container.getBaseIPS()
-            assert containerIPS <= self.ipsCap
-            if self.currentips > containerIPS:
-                execTime = containerIPS / self.ipsCap
-                self.currentips -= containerIPS
-                exeTime += execTime
-                self.env.exe_time[container.id] = execTime
-                self.env.local_exe_time[container.id] = 0
-                container.remainedips.append(0)
-            else:
-                partiallyexe = containerIPS - self.currentips
-                if partiallyexe >= self.ipsCap:
-                    execTime = 10
-                    container.remainedips.append(0)
-                else:
-                    self.partiallyexe_list.append(container.id)
-                    container.remainedips.append(partiallyexe)
-                    execTime = self.currentips / self.ipsCap
-                    exeTime += execTime
-                    self.currentips = 0
-                    execTime = 2
-                # assert execTime <= 1
-                self.env.exe_time[container.id] = execTime
-                self.env.local_exe_time[container.id] = 0
-
-
+            currentIPS = container.getBaseIPS()
+            execTime = currentIPS / self.ipsCap
+            exeTime += execTime
+            self.env.exe_time[container.id] = execTime
+            # print(execTime)
+            exe_info.append(c_exeinfo)
+        return exe_info
 
 

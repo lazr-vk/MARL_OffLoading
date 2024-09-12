@@ -1,8 +1,101 @@
 import torch as th
 from torch.distributions import Categorical
 from .epsilon_schedules import DecayThenFlatSchedule
+from torch.distributions.one_hot_categorical import OneHotCategorical
 
 REGISTRY = {}
+
+
+class GumbelSoftmax(OneHotCategorical):
+
+    def __init__(self, logits, probs=None, temperature=1):
+        super(GumbelSoftmax, self).__init__(logits=logits, probs=probs)
+        self.eps = 1e-20
+        self.temperature = temperature
+
+    def sample_gumbel(self):
+        U = self.logits.clone()
+        U.uniform_(0, 1)
+        return -th.log(-th.log(U + self.eps) + self.eps)
+
+    def gumbel_softmax_sample(self):
+        """ Draw a sample from the Gumbel-Softmax distribution. The returned sample will be a probability distribution
+        that sums to 1 across classes"""
+        y = self.logits + self.sample_gumbel()
+        return th.softmax( y / self.temperature, dim=-1)
+
+    def hard_gumbel_softmax_sample(self):
+        y = self.gumbel_softmax_sample()
+        return (th.max(y, dim=-1, keepdim=True)[0] == y).float()
+
+    def rsample(self):
+        return self.gumbel_softmax_sample()
+
+    def sample(self):
+        return self.rsample().detach()
+
+    def hard_sample(self):
+        return self.hard_gumbel_softmax_sample()
+
+
+def onehot_from_logits(logits, avail_logits, eps=0.0):
+    """
+    Given batch of logits, return one-hot sample using epsilon greedy strategy
+    (based on given epsilon)
+    """
+    # get best (according to current policy) actions in one-hot form
+    argmax_acs = (logits == logits.max(-1, keepdim=True)[0]).float()
+    if eps == 0.0:
+        return argmax_acs
+
+    # chooses between best and random actions using epsilon greedy
+    agent_outs = th.nn.functional.softmax(logits, dim=-1)
+    epsilon_action_num = avail_logits.sum(dim=-1, keepdim=True).float()
+    agent_outs = ((1 - eps) * agent_outs + th.ones_like(agent_outs) * eps / epsilon_action_num)
+    agent_outs[avail_logits == 0] = 0.0
+    picked_actions = Categorical(agent_outs).sample()
+    picked_actions = th.nn.functional.one_hot(picked_actions, num_classes=logits.shape[-1]).float()
+    return picked_actions
+
+
+class GumbelSoftmaxMultinomialActionSelector():
+
+    def __init__(self, args):
+        self.args = args
+
+        self.schedule = DecayThenFlatSchedule(args.epsilon_start, args.epsilon_finish, args.epsilon_anneal_time,
+                                              decay="linear")
+        self.epsilon = self.schedule.eval(0)
+        self.test_greedy = getattr(args, "test_greedy", True)
+
+    def select_action(self, agent_logits, avail_logits, t_env, test_mode=False, explore=False):
+        masked_policies = agent_logits.clone()
+
+        self.epsilon = self.schedule.eval(t_env)
+
+        if test_mode and self.test_greedy:
+            # return one-hot action
+            picked_actions = (th.max(masked_policies, dim=-1, keepdim=True)[0] == masked_policies).float()
+        else:
+            if not explore:
+                picked_actions = GumbelSoftmax(logits=masked_policies).gumbel_softmax_sample()
+                picked_actions_hard = (th.max(picked_actions, dim=-1, keepdim=True)[0] == picked_actions).float()
+                picked_actions = (picked_actions_hard - picked_actions).detach() + picked_actions
+            else:
+                # choose between the best and random actions using epsilon greedy
+                agent_outs = th.nn.functional.softmax(masked_policies, dim=-1)
+                epsilon_action_num = avail_logits.sum(dim=-1, keepdim=True).float()
+                agent_outs = ((1 - self.epsilon) * agent_outs + th.ones_like(
+                    agent_outs) * self.epsilon / epsilon_action_num)
+                agent_outs[avail_logits == 0] = 0.0
+                # print('masked_policies', masked_policies)
+                picked_actions = Categorical(agent_outs).sample()
+                picked_actions = th.nn.functional.one_hot(picked_actions, num_classes=masked_policies.shape[-1]).float()
+
+        return picked_actions
+
+
+REGISTRY["gumbel"] = GumbelSoftmaxMultinomialActionSelector
 
 
 class MultinomialActionSelector():
@@ -15,7 +108,7 @@ class MultinomialActionSelector():
         self.epsilon = self.schedule.eval(0)
         self.test_greedy = getattr(args, "test_greedy", True)
 
-    def select_action(self, agent_inputs, avail_actions, t_env, test_mode=False):
+    def select_action(self, agent_inputs, avail_actions, t_env, test_mode=False, explore=False, alg=None):
         masked_policies = agent_inputs.clone()
         masked_policies[avail_actions == 0.0] = 0.0
 
@@ -41,7 +134,7 @@ class EpsilonGreedyActionSelector():
                                               decay="linear")
         self.epsilon = self.schedule.eval(0)
 
-    def select_action(self, agent_inputs, avail_actions, t_env, test_mode=False):
+    def select_action(self, agent_inputs, avail_actions, t_env, test_mode=False, explore=False, alg=None):
 
         # Assuming agent_inputs is a batch of Q-Values for each agent bav
         self.epsilon = self.schedule.eval(t_env)

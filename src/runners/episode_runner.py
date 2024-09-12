@@ -71,7 +71,7 @@ class EpisodeRunner:
 
             reward, terminated, env_info = self.env.step(actions[0])
             episode_return += reward
-
+            a = (terminated != env_info.get("episode_limit", False),)
             post_transition_data = {
                 "actions": actions,
                 "reward": [(reward,)],

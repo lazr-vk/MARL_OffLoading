@@ -11,5 +11,14 @@ def build_td_lambda_targets(rewards, terminated, mask, target_qs, n_agents, gamm
         ret[:, t] = td_lambda * gamma * ret[:, t + 1] + mask[:, t] \
                     * (rewards[:, t] + (1 - td_lambda) * gamma * target_qs[:, t + 1] * (1 - terminated[:, t]))
     # Returns lambda-return from t=0 to t=T-1, i.e. in B*T-1*A
+    nan_mask = th.isnan(ret)
+
+    # 检查张量中是否包含 NaN 值
+    contains_nan = nan_mask.any()
+    # if contains_nan:
+    #     print('rewards', rewards)
+    #     print('terminated', terminated)
+    #     print('mask', mask)
+    #     print('target_qs', target_qs)
     return ret[:, 0:-1]
 

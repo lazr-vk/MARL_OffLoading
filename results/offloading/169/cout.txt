@@ -1,8 +1,0 @@
-Closing environment
-Exiting Main
-Stopping all threads
-Thread pydevd.Writer is alive! Is daemon: True
-Thread joined
-Thread pydevd.Reader is alive! Is daemon: True
-Thread joined
-Thread pydevd.CommandThread is alive! Is daemon: True

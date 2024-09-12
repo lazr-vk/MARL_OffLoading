@@ -42,7 +42,7 @@ class COMALearner:
         avail_actions = batch["avail_actions"][:, :-1]
 
         critic_mask = mask.clone()
-
+        # 每个agent的mask应该不同不能用repeat
         mask = mask.repeat(1, 1, self.n_agents).view(-1)
 
         q_vals, critic_train_stats = self._train_critic(batch, rewards, terminated, actions, avail_actions,

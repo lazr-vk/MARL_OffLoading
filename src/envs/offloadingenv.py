@@ -25,8 +25,9 @@ class OffloadingEnv(MultiAgentEnv):
         self.interval = 0
         self.inactiveContainers = []
         self.stats = None
-        self.episode_limit = 20
+        self.episode_limit = env_args["num_step"]
         self.current_step = 0
+        self.pre_step = 0
         self.n_agents = len(container)
         self.n_actions = len(host)
         self.state = []
@@ -44,10 +45,14 @@ class OffloadingEnv(MultiAgentEnv):
         # 创建主机状态的时间序列
         self.host_time_series = np.zeros((1, 3 * len(self.hostlist)))
         self.container_time_series = np.zeros((1, 3 * len(self.containerlist)))
+        self.exe_time = np.full(len(self.containerlist), -1.0)
+        self.trans_time = np.full(len(self.containerlist), -1.0)
+        self.local_exe_time = np.full(len(self.containerlist), -1.0)
+        self.all_local_time = np.full(len(self.containerlist), -1.0)
 
     def addHostInit(self, IPS, RAM, Disk, Bw, Latency, Powermodel, Position):
         assert len(self.hostlist) < self.hostlimit
-        host = Host(len(self.hostlist), IPS, RAM, Disk, Bw, Latency, Powermodel, Position, self)
+        host = Host(len(self.hostlist)+2, IPS, RAM, Disk, Bw, Latency, Powermodel, Position, self)
         self.hostlist.append(host)
 
     def addHostlistInit(self, hostList):
@@ -55,24 +60,24 @@ class OffloadingEnv(MultiAgentEnv):
         for IPS, RAM, Disk, Bw, Latency, Powermodel, Position in hostList:
             self.addHostInit(IPS, RAM, Disk, Bw, Latency, Powermodel, Position)
 
-    def addContainerInit(self, CreationID, CreationInterval, IPSModel, RAMModel, DiskModel, Position):
+    def addContainerInit(self, CreationID, CreationInterval, IPSModel, RAMModel, DiskModel, Position, HostModel):
         container = Container(len(self.containerlist), CreationID, CreationInterval, IPSModel, RAMModel, DiskModel,
-                              Position, self, HostID=-1)
+                              Position, HostModel, self, HostID=-1)
         self.containerlist.append(container)
         # return container
 
     def addContainerListInit(self, containerInfoList):
         # deployed = containerInfoList[:min(len(containerInfoList), self.containerlimit - self.getNumActiveContainers())]
         # deployedContainers = []
-        for CreationID, CreationInterval, IPSModel, RAMModel, DiskModel, Position in containerInfoList:
-            self.addContainerInit(CreationID, CreationInterval, IPSModel, RAMModel, DiskModel, Position)
+        for CreationID, CreationInterval, IPSModel, RAMModel, DiskModel, Position, HostModel in containerInfoList:
+            self.addContainerInit(CreationID, CreationInterval, IPSModel, RAMModel, DiskModel, Position, HostModel)
         # self.containerlist += [None] * (self.containerlimit - len(self.containerlist))
         # return [container.id for container in deployedContainers]
 
     def getContainersOfHost(self, hostID):  # 获取部署在hostID上的容器ID
         containers = []
         for container in self.containerlist:
-            if container and container.hostid == hostID:  # 检查是否有容器部署在hostID的主机上
+            if container and container.hostid == hostID - 2:  # 检查是否有容器部署在hostID的主机上
                 containers.append(container.id)  # container.id表示容器ID
         return containers
 
@@ -91,13 +96,19 @@ class OffloadingEnv(MultiAgentEnv):
 
     def getPlacementPossible(self, containerID, hostID):
         container = self.containerlist[containerID]
-        host = self.hostlist[hostID]
         ipsreq = container.getBaseIPS()
         ramsizereq, ramreadreq, ramwritereq = container.getRAM()
         disksizereq, diskreadreq, diskwritereq = container.getDisk()
-        ipsavailable = host.getIPSAvailable()
-        ramsizeav, ramreadav, ramwriteav = host.getRAMAvailable()
-        disksizeav, diskreadav, diskwriteav = host.getDiskAvailable()
+        if hostID == len(self.hostlist):
+            host = container.hostmodel
+            ipsavailable = host.ipsCap
+            ramsizeav = host.ramCap.size
+            disksizeav = host.diskCap.size
+        else:
+            host = self.hostlist[hostID]
+            ipsavailable = host.getIPSAvailable()
+            ramsizeav, ramreadav, ramwriteav = host.getRAMAvailable()
+            disksizeav, diskreadav, diskwriteav = host.getDiskAvailable()
         return (ipsreq <= ipsavailable and \
                 ramsizereq <= ramsizeav and \
                 # ramreadreq <= ramreadav and \
@@ -110,58 +121,86 @@ class OffloadingEnv(MultiAgentEnv):
     def allocateByDecision(self, actions):
         transmission = []
         migrations = []
-        routerBwToEach = self.totalbw / len(actions)
+        # routerBwToEach = self.totalbw / len(actions)
+        routerBwToEach = 10000
         for cid, hid in enumerate(actions):
             container = self.getContainerByID(cid)
-            host = self.getHostByID(hid)
-            # assert container.getHostID() == -1
-            numberAllocToHost = len(self.getNumberofContainers(hid.item(), actions))  # getMigrationToHost获取迁移到hid主机上的任务列表
-            allocbw = min(self.getHostByID(hid).bwCap.downlink / numberAllocToHost, routerBwToEach)
-            if self.getPlacementPossible(cid, hid.item()):  # 判断该容器任务是否能部署在该主机上（通过判断任务需要的资源主机是不是能够满足）
+            assert container.getHostID() == -1
+            if hid.item() == len(self.hostlist):  # 本地执行，传输时间为0
+                # if self.getPlacementPossible(cid, hid.item()):  # 判断该容器任务是否能部署在该主机上（通过判断任务需要的资源主机是不是能够满足）
                 migrations.append((cid, hid.item()))
-                lastMigrationTime = container.allocate(hid.item(), allocbw)
-                host.priority_list.append(cid)
-            # destroy pointer to this unallocated container as book-keeping is done by workload model
-            else:
-                migrations.append((cid, hid.item()))
-                container.hostid = -1
                 lastMigrationTime = 0
-            transmission.append(lastMigrationTime)
-        return transmission, migrations
+                container.hostid = hid.item()
+                container.hostmodel.priority_list.append(cid)
+                # destroy pointer to this unallocated container as book-keeping is done by workload model
+                # else:
+                #     migrations.append((cid, hid.item()))
+                #     container.hostid = hid.item()
+                #     lastMigrationTime = 0
+            else:  # 边缘执行
+                host = self.getHostByID(hid)
+                numberAllocToHost = len(self.getNumberofContainers(hid.item(), actions))  # getMigrationToHost获取迁移到hid主机上的任务列表
+                # allocbw = min(self.getHostByID(hid).bwCap.downlink / numberAllocToHost, routerBwToEach)
+                # if self.getPlacementPossible(cid, hid.item()):  # 判断该容器任务是否能部署在该主机上（通过判断任务需要的资源主机是不是能够满足）
+                migrations.append((cid, hid.item()))
+                lastMigrationTime = container.allocate(hid.item(), routerBwToEach)
+                host.priority_list.append(cid)
+                # destroy pointer to this unallocated container as book-keeping is done by workload model
+                # else:
+                #     migrations.append((cid, hid.item()))
+                #     container.hostid = -1
+                #     lastMigrationTime = 0
+            self.trans_time[cid] = lastMigrationTime
+        return migrations
 
-    def execute(self):
-        exe_info = []
-        for c in self.hostlist:
-            host_exe_info = c.execute()
-            exe_info += host_exe_info
+    def execute(self, action):
+        for h in self.hostlist:  # 边缘执行
+            h.currentips = h.ipsCap
+            h.execute()
+            h.priority_list = []
+            # exe_info.append(host_exe_info)
+        for c in self.containerlist:  # 本地执行
+            c.execute()
             c.priority_list = []
             # exe_info.append(host_exe_info)
-        return exe_info
 
     def transmission(self):
         for c in self.containerlist:
             c.hostid = -1
+        self.trans_time[:] = -1
+        self.exe_time[:] = -1
+        self.local_exe_time[:] = -1
+        self.all_local_time[:] = -1
+
+    def all_local_exe(self):
+        for c in self.containerlist:  # 本地执行
+            c.execute(all_local=True)
+
 
     def step(self, actions):
         """执行动作，并返回奖励、是否终止、信息"""
-        self.interval += 1
+        # print('step_interval', self.interval)
         # 时间设为1s，1s内获得奖励，1s到2s奖励为0，2s以上获得惩罚
         # 将任务的hostid修改为卸载决策的主机，并计算传输时间
         self.transmission()
-        transmission_time, migrations = self.allocateByDecision(actions)
+        migrations = self.allocateByDecision(actions)
         # for c in self.containerlist:
         #     print("任务：", c.id)
         #     print("目标主机:", c.hostid)
         # 将任务按优先级排序，并执行任务，计算时间和能耗
-        self.execute()
+        self.execute(actions)
+        self.all_local_exe()
         # for c in self.containerlist:
         #     print("任务：", c.id)
         #     print("目标主机:", c.hostid)
-        reward = np.random.random(1)  # 假设奖励是随机的
+        a = (self.all_local_time - (self.trans_time + self.local_exe_time + self.exe_time)) / self.all_local_time
+        reward = np.sum((self.all_local_time - (self.trans_time + self.local_exe_time + self.exe_time)) / self.all_local_time)
+        self.interval += 1
         self.current_step += 1
+        # print('self.current_step', self.current_step)
         # print(self.episode_limit)
         # print(self.current_step)
-        terminated = self.current_step >= self.episode_limit
+        terminated = (self.current_step - self.pre_step) >= self.episode_limit
         info = {"step": self.current_step}
 
         # # 更新状态和观测
@@ -178,30 +217,39 @@ class OffloadingEnv(MultiAgentEnv):
         """返回观测的维度"""
         return self.observations.shape[1]
 
+    def get_localhost_state(self, container):
+        localhost_info = dict()
+        localhost_info['cpu'] = [container.get_local_cpu_usage()]
+        localhost_info['ram'] = [container.get_local_ram_usage()]
+        localhost_info['disk'] = [container.get_local_disk_usage()]
+        cpulist, ramlist, disklist = localhost_info['cpu'], localhost_info['ram'], localhost_info['disk']
+        datapoint = np.concatenate([cpulist, ramlist, disklist]).reshape(1, -1)
+        return datapoint
+
     def get_host_state(self, host):
         hostinfo = dict()
         # print(self.interval)
         hostinfo['interval'] = self.interval
-        hostinfo['cpu'] = [host.getCPU()]  # cpu使用率
+        hostinfo['cpu'] = [host.getCPU() / 100]  # cpu使用率
         hostinfo['numcontainers'] = [len(self.getContainersOfHost(host.id))]  # 运行的容器任务数量
         hostinfo['power'] = [host.getPower()]  # 每个主机的功耗(根据cpu利用率选择能耗)
         hostinfo['baseips'] = [host.getBaseIPS()]  # 运行在主机上的所有容器任务ips和
         hostinfo['ipsavailable'] = [host.getIPSAvailable()]  # 每个主机可用的ips(最大ips-baseips)
         hostinfo['ipscap'] = [host.ipsCap]  # 每个主机的最大ips
-        hostinfo['apparentips'] = [host.getApparentIPS()]
+        # hostinfo['apparentips'] = [host.getApparentIPS()]
         hostinfo['ram'] = [host.getCurrentRAM()]  # 获取部署在该主机上所有任务对内存需求的和
         hostinfo['ramavailable'] = [host.getRAMAvailable()]  # 获取当前时刻该主机可用的内存
         hostinfo['disk'] = [host.getCurrentDisk()]
         hostinfo['diskavailable'] = [host.getDiskAvailable()]
-        cpulist, ramlist, disklist = hostinfo['cpu'], [i[0] for i in hostinfo['ram']], [i[0] for i in hostinfo['disk']]
+        cpulist, ramlist, disklist = hostinfo['cpu'], [i[0] / host.ramCap.size for i in hostinfo['ram']], [i[0] / host.diskCap.size for i in hostinfo['disk']]
         datapoint = np.concatenate([cpulist, ramlist, disklist]).reshape(1, -1)
         return datapoint
 
     def get_containers_state(self, container):
         containerinfo = dict()
         containerinfo['interval'] = self.interval
-        containerinfo['ips'] = [container.getBaseIPS() if container else 0]
-        containerinfo['apparentips'] = [container.getApparentIPS() if container else 0]
+        containerinfo['ips'] = [container.getBaseIPS() if container else 0]  # 返回当前时刻任务所需的ips
+        # containerinfo['apparentips'] = [container.getApparentIPS() if container else 0]  # 返回所部署的主机可用的ips
         containerinfo['ram'] = [container.getRAM() if container else 0]
         containerinfo['disk'] = [container.getDisk() if container else 0]
         containerinfo['creationids'] = [container.creationID if container else -1]
@@ -213,13 +261,15 @@ class OffloadingEnv(MultiAgentEnv):
     def get_state(self):
         """返回全局状态"""
         host_state = np.concatenate([self.get_host_state(c) for c in self.hostlist], axis=1)
-        print(host_state)
+        # print(host_state)
         container_state = np.concatenate([self.get_containers_state(c) for c in self.containerlist], axis=1)
-        self.host_time_series = np.append(self.host_time_series, host_state, axis=0)
-        self.hostinfo.append(host_state)
-        self.container_time_series = np.append(self.container_time_series, container_state, axis=0)
-        self.containerinfo.append(container_state)
-        state = np.concatenate((container_state, host_state), axis=1).reshape(-1)
+        local_host_state = np.concatenate([self.get_localhost_state(c) for c in self.containerlist], axis=1)
+        if self.interval != 0:
+            self.host_time_series = np.append(self.host_time_series, host_state, axis=0)
+            self.hostinfo.append(host_state)
+            self.container_time_series = np.append(self.container_time_series, container_state, axis=0)
+            self.containerinfo.append(container_state)
+        state = np.concatenate((container_state, local_host_state, host_state), axis=1).reshape(-1)
         # self.saveAllContainerInfo()
         # self.saveMetrics(destroyed, migrations)
         # self.saveSchedulerInfo(selectedcontainers, decision, schedulingtime)
@@ -233,7 +283,7 @@ class OffloadingEnv(MultiAgentEnv):
         return self.get_state().size
 
     def get_obs(self):
-        """返回所有agent的观测列表"""
+        """返回所有agent的观测列表，按任务特征，es特征，本地主机特征拼接"""
         obs = []
         for c in self.containerlist:
             container_obs = self.get_containers_state(c)
@@ -243,7 +293,10 @@ class OffloadingEnv(MultiAgentEnv):
                 if cid==0:
                     cid_obs = np.full((1, 3), -1)
                 else:
-                    cid_obs = self.get_host_state(self.getHostByID(cindex))
+                    if cindex == len(self.hostlist):
+                        cid_obs = self.get_localhost_state(c)
+                    else:
+                        cid_obs = self.get_host_state(self.getHostByID(cindex))
                 container_obs = np.append(container_obs, cid_obs, axis=1)
             obs.append(container_obs.reshape(-1))
         return obs
@@ -292,9 +345,9 @@ class OffloadingEnv(MultiAgentEnv):
             # "n_actions": self.get_total_actions(),
             # "n_agents": self.n_agents,
             # "episode_limit": self.episode_limit
-            "state_shape": 3 * (self.n_actions + self.n_agents),
-            "obs_shape": 3 * (self.n_actions + 1),
-            "n_actions": self.n_actions,
+            "state_shape": 3 * self.n_actions + 3 * self.n_agents + 3 * self.n_agents,
+            "obs_shape": 3 + 3 * (self.n_actions + 1),
+            "n_actions": self.n_actions + 1,
             "n_agents": self.n_agents,
             "episode_limit": self.episode_limit
         }

@@ -69,7 +69,12 @@ class MADDPGDiscreteLearner:
         mask = mask.expand_as(td_error)
         masked_td_error = td_error * mask
         loss = (masked_td_error ** 2).sum() / mask.sum()
-
+        # print('target_vals', target_vals)
+        # print('targets.detach()', targets.detach())
+        # print('q_taken', q_taken)
+        # print('td_error', td_error)
+        # print('mask.sum()', mask.sum())
+        # print('critic_loss', loss)
         self.critic_optimiser.zero_grad()
         loss.backward()
         critic_grad_norm = th.nn.utils.clip_grad_norm_(self.critic_params, self.args.grad_norm_clip)
@@ -90,9 +95,11 @@ class MADDPGDiscreteLearner:
 
         # Compute the actor loss
         pg_loss = -chosen_action_qvals.mean()
-
+        # print('pg_loss', pg_loss)
         # Optimise agents
         self.agent_optimiser.zero_grad()
+
+        # with th.autograd.detect_anomaly():
         pg_loss.backward()
         agent_grad_norm = th.nn.utils.clip_grad_norm_(self.agent_params, self.args.grad_norm_clip)
         self.agent_optimiser.step()
@@ -109,13 +116,13 @@ class MADDPGDiscreteLearner:
 
         if t_env - self.log_stats_t >= self.args.learner_log_interval:
             self.logger.log_stat("critic_loss", loss.item(), t_env)
-            self.logger.log_stat("critic_grad_norm", critic_grad_norm, t_env)
+            # self.logger.log_stat("critic_grad_norm", critic_grad_norm, t_env)
             mask_elems = mask.sum().item()
             self.logger.log_stat("td_error_abs", masked_td_error.abs().sum().item() / mask_elems, t_env)
             self.logger.log_stat("q_taken_mean", (q_taken * mask).sum().item() / mask_elems, t_env)
             # self.logger.log_stat("target_mean", targets.sum().item() / mask_elems, t_env)
             self.logger.log_stat("pg_loss", pg_loss.item(), t_env)
-            self.logger.log_stat("agent_grad_norm", agent_grad_norm, t_env)
+            # self.logger.log_stat("agent_grad_norm", agent_grad_norm, t_env)
             # self.logger.log_stat("pi_max", (pi.max(dim=-1)[0] * mask).sum().item() / mask_elems, t_env)
             self.log_stats_t = t_env
 

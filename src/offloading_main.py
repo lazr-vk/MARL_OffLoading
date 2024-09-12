@@ -72,7 +72,7 @@ def config_copy(config):
 
 
 if __name__ == '__main__':
-    params = deepcopy(['main.py', '--config=offloading_coma', '--env-config=offloadingenv'])
+    params = deepcopy(['main.py', '--config=offloading_maddpg', '--env-config=offloadingenv'])
     # Get the defaults from default.yaml
     with open(os.path.join(os.path.dirname(__file__), "config", "offloading_default.yaml"), "r") as f:
         try:

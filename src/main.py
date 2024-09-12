@@ -20,7 +20,7 @@ ex = Experiment("pymarl")
 ex.logger = logger
 ex.captured_out_filter = apply_backspaces_and_linefeeds
 
-results_path = os.path.join(dirname(dirname(abspath(__file__))), "results")
+results_path = os.path.join(dirname(dirname(abspath(__file__))), "results")  # abspath获取当前文件的绝对路径，dirname获取路径的上一级路径
 
 
 @ex.main
@@ -73,7 +73,7 @@ def config_copy(config):
 
 if __name__ == '__main__':
     # params = deepcopy(sys.argv)
-    params = deepcopy(['main.py', '--config=coma', '--env-config=sc2', 'with', 'env_args.map_name=2s3z'])
+    params = deepcopy(['main.py', '--config=qmix', '--env-config=sc2', 'with', 'env_args.map_name=2s3z'])
     # Get the defaults from default.yaml
     with open(os.path.join(os.path.dirname(__file__), "config", "default.yaml"), "r") as f:
         try:

@@ -1,4 +1,6 @@
 import numpy as np
+import torch as th
+import math
 from envs import REGISTRY as env_REGISTRY
 from functools import partial
 from components.episode_buffer import EpisodeBatch
@@ -65,9 +67,16 @@ class OffloadingRunner:  # 应该定义为调度器
             # print(self.t)
             # Pass the entire batch of experiences up till now to the agents
             # Receive the actions for each agent at this timestep in a batch of size 1
-            actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
-
+            if getattr(self.args, "action_selector", "epsilon_greedy") == "gumbel":
+                actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode,
+                                                      explore=(not test_mode), alg=self.args.learner)
+            else:
+                actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode, alg=self.args.learner)
+            if getattr(self.args, "action_selector", "epsilon_greedy") == "gumbel":
+                actions = th.argmax(actions, dim=-1).long()
             reward, terminated, env_info = self.env.step(actions[0])
+            if math.isnan(reward):
+                print('1')
             episode_return += reward
 
             post_transition_data = {
@@ -79,7 +88,7 @@ class OffloadingRunner:  # 应该定义为调度器
             self.batch.update(post_transition_data, ts=self.t)
 
             self.t += 1
-
+        self.env.pre_step = self.env.current_step
         last_data = {
             "state": [self.env.get_state()],
             "avail_actions": [self.env.get_avail_actions()],
@@ -88,7 +97,14 @@ class OffloadingRunner:  # 应该定义为调度器
         self.batch.update(last_data, ts=self.t)
 
         # Select actions in the last stored state
-        actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
+        if getattr(self.args, "action_selector", "epsilon_greedy") == "gumbel":
+            actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode,
+                                              explore=(not test_mode), alg=self.args.learner)
+        else:
+            actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode,
+                                              alg=self.args.learner)
+        if getattr(self.args, "action_selector", "epsilon_greedy") == "gumbel":
+            actions = th.argmax(actions, dim=-1).long()
         self.batch.update({"actions": actions}, ts=self.t)
 
         cur_stats = self.test_stats if test_mode else self.train_stats
@@ -96,12 +112,12 @@ class OffloadingRunner:  # 应该定义为调度器
         log_prefix = "test_" if test_mode else ""
         cur_stats.update({k: cur_stats.get(k, 0) + env_info.get(k, 0) for k in set(cur_stats) | set(env_info)})
         cur_stats["n_episodes"] = 1 + cur_stats.get("n_episodes", 0)
-        cur_stats["ep_length"] = self.t + cur_stats.get("ep_length", 0)
+        cur_stats["ep_length"] = self.t_env + cur_stats.get("step", 0)
 
         if not test_mode:
             self.t_env += self.t
 
-        cur_returns.append(episode_return)
+        cur_returns.append(episode_return)  # 添加每个回合的奖励值
 
         if test_mode and (len(self.test_returns) == self.args.test_nepisode):
             self._log(cur_returns, cur_stats, log_prefix)
@@ -113,7 +129,7 @@ class OffloadingRunner:  # 应该定义为调度器
 
         return self.batch
 
-    def _log(self, returns, stats, prefix):
+    def _log(self, returns, stats, prefix):  # 计算整个episode的奖励的均值和方差
         self.logger.log_stat(prefix + "return_mean", np.mean(returns), self.t_env)
         self.logger.log_stat(prefix + "return_std", np.std(returns), self.t_env)
         returns.clear()

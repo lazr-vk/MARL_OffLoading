@@ -9,11 +9,12 @@ env_args:
   hosts: 16
   new_containers: 16
   seed: 42
-  num_step: 20
+  num_step: 288
 test_greedy: True
-test_nepisode: 32
-test_interval: 16
-log_interval: 16
-runner_log_interval: 16
-learner_log_interval: 16
-t_max: 32
+save_model_interval: 10000
+test_nepisode: 10
+test_interval: 1000
+log_interval: 288
+runner_log_interval: 288
+learner_log_interval: 288
+t_max: 288000

@@ -9,13 +9,18 @@ import math
 class PMRaspberryPi4B(PM):
 	def __init__(self):
 		super().__init__()
-		self.powerlist = [2.45, 2.78, 2.90, 3.03, 3.65, 3.66, 3.69, 3.71, 3.72, 4.14, 4.75]
+		self.powerlist = [2.45, 2.78, 2.90, 3.03, 3.65, 3.66, 3.69, 3.71, 3.72, 4.14, 6.90]
 
 	# cpu consumption in 100
 	def power(self):
 		cpu = self.host.getCPU()
 		index = math.floor(cpu / 10)
-		left = self.powerlist[index]
-		right = self.powerlist[index + 1 if cpu%10 != 0 else index]
-		alpha = (cpu / 10) - index
-		return alpha * right + (1 - alpha) * left
+		# print('cpu', cpu)
+		# print(index)
+		if index >= (len(self.powerlist) - 1):
+			return self.powerlist[-1]
+		else:
+			left = self.powerlist[index]
+			right = self.powerlist[index + 1 if cpu % 10 != 0 else index]
+			alpha = (cpu / 10) - index
+			return alpha * right + (1 - alpha) * left
